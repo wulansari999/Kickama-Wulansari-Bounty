@@ -1,5 +1,10 @@
 # Tent of Trials
 
+[![Diagnostic build log](https://github.com/lobster-trap/zeroeye/actions/workflows/diagnostic-build-log.yml/badge.svg)](https://github.com/lobster-trap/zeroeye/actions/workflows/diagnostic-build-log.yml)
+[![License: MIT / Apache-2.0](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue.svg)](#code-licenses)
+[![GitHub stars](https://img.shields.io/github/stars/lobster-trap/zeroeye?style=flat&logo=github)](https://github.com/lobster-trap/zeroeye/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/lobster-trap/zeroeye.svg)](https://github.com/lobster-trap/zeroeye/commits/main)
+
 Trading and risk platform.
 
 ## Getting Started
