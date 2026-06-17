@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lobster-trap/zeroeye/schemas/api-error.schema.json",
+  "title": "Market Gateway API Error Response",
+  "description": "JSON response shape for market/gateway.APIError in market/gateway/api.go. The Go struct exposes code, message, optional request_id, and optional details; StatusCode is intentionally omitted from JSON via json:\"-\".",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "message"
+  ],
+  "properties": {
+    "code": {
+      "description": "Application-level error code emitted by the market gateway.",
+      "type": "integer",
+      "enum": [
+        4001,
+        4002,
+        4003,
+        4004,
+        4029,
+        5001,
+        5003,
+        5004
+      ]
+    },
+    "message": {
+      "description": "Human-readable error message suitable for clients and logs.",
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "description": "Optional request correlation ID, normally generated as a 32-character lowercase hexadecimal string by generateRequestID().",
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "details": {
+      "description": "Optional machine-readable details for the error. The Go field is interface{}, so any JSON value is allowed."
+    }
+  },
+  "examples": [
+    {
+      "code": 4001,
+      "message": "Invalid request"
+    },
+    {
+      "code": 5001,
+      "message": "WebSocket endpoint not yet implemented",
+      "request_id": "6f1d4d9858b34a589559d23a0c717b2d",
+      "details": {
+        "endpoint": "/ws",
+        "retryable": false
+      }
+    }
+  ]
+}

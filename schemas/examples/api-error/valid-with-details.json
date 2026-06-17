@@ -1,0 +1,10 @@
+{
+  "code": 4029,
+  "message": "Rate limit exceeded",
+  "request_id": "6f1d4d9858b34a589559d23a0c717b2d",
+  "details": {
+    "limit": 10,
+    "remaining": 0,
+    "reset_epoch_seconds": 1767225600
+  }
+}
