@@ -309,4 +309,32 @@ Audit logs are retained for 365 days and include:
 1. Generate new certificate
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
-4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+3. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+---
+
+## Log Aggregator JSONL Schema
+
+The `log_aggregator.py` tool supports JSONL output via `--format jsonl`. Each line is a JSON object with the following schema:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | int (Unix) or null | Parsed log timestamp in seconds since epoch. `null` for unparseable lines. |
+| `level` | string | Log level: `debug`, `info`, `warn`, `error`, `critical`, or `unknown` |
+| `source` | string | Service or component that generated the log entry |
+| `message` | string | Log message text |
+| `metadata` | object | Additional structured fields from the original log entry |
+
+Records are ordered by parsed timestamp (ascending). Entries without a timestamp appear last.
+
+Lines that cannot be parsed by any log parser are included as warning records with `level: "warn"`, `source: "parser"`, and the original text stored in `metadata.raw`.
+
+### Example JSONL record
+
+```json
+{"timestamp": 1705314600, "level": "info", "source": "backend", "message": "Server started successfully", "metadata": {"timestamp": "2024-01-15T10:30:00Z", "level": "info", "service": "backend", "message": "Server started successfully", "format": "json"}}
+```
+
+### Sample log fixtures
+
+Sample log files in three formats (JSON, plain text, Nginx) are available in `tests/log_samples/` for testing the JSONL export.

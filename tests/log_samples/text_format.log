@@ -1,0 +1,4 @@
+2024-01-15 10:30:00 [backend] INFO Server started successfully
+2024-01-15 10:30:05 [backend] ERROR Connection timeout to database
+2024-01-15 10:30:10 [market] WARN Orderbook sync delayed by 200ms
+this line is completely unparseable garbage

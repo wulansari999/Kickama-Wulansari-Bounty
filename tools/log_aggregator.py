@@ -206,6 +206,7 @@ class LogAggregator:
     def __init__(self):
         self.parsers = [JSONLogParser(), TextLogParser(), NginxLogParser()]
         self.entries: List[Dict[str, Any]] = []
+        self.unparseable_lines: List[str] = []
         self.level_counts: Counter = Counter()
         self.service_counts: Counter = Counter()
         self.hourly_counts: Counter = Counter()
@@ -260,6 +261,9 @@ class LogAggregator:
                     self.errors_by_service[service].append(msg)
                     self.error_patterns[msg] += 1
                 return True
+        # No parser matched — track as unparseable
+        if line.strip():
+            self.unparseable_lines.append(line)
         return False
 
     def get_summary(self) -> Dict[str, Any]:
@@ -359,6 +363,45 @@ class LogAggregator:
             }, f, indent=2, default=str)
         logger.info(f"Report exported to {output_path}")
 
+    def export_jsonl(self, output_path: str, unparseable_lines: Optional[List[str]] = None):
+        """Export entries as JSONL (one JSON object per line).
+        
+        Each record includes: timestamp, level, source, message, metadata.
+        Records are ordered by parsed timestamp.
+        A warning record is included for each unparseable line.
+        """
+        # Sort entries by timestamp (None timestamps go last)
+        sorted_entries = sorted(
+            self.entries,
+            key=lambda e: (e.get('timestamp') is None, e.get('timestamp') or 0)
+        )
+
+        with open(output_path, 'w') as f:
+            for entry in sorted_entries:
+                record = {
+                    'timestamp': entry.get('timestamp'),
+                    'level': entry.get('level', 'unknown'),
+                    'source': entry.get('service', 'unknown'),
+                    'message': entry.get('message', ''),
+                    'metadata': entry.get('fields', {}),
+                }
+                f.write(json.dumps(record, default=str) + '\n')
+
+            # Append warning records for unparseable lines
+            if unparseable_lines:
+                for line in unparseable_lines:
+                    warning = {
+                        'timestamp': None,
+                        'level': 'warn',
+                        'source': 'parser',
+                        'message': 'Unparseable log line',
+                        'metadata': {'raw': line.strip()},
+                    }
+                    f.write(json.dumps(warning, default=str) + '\n')
+
+        total = len(sorted_entries) + len(unparseable_lines or [])
+        logger.info(f"Exported {total} JSONL records ({len(sorted_entries)} parsed, {len(unparseable_lines or [])} unparseable) to {output_path}")
+
     def generate_html_report(self, output_path: str):
         summary = self.get_summary()
         html = f"""<!DOCTYPE html>
@@ -409,7 +452,7 @@ def parse_args():
     parser.add_argument("--input", "-i", help="Input log file or glob pattern")
     parser.add_argument("--dir", help="Directory containing log files")
     parser.add_argument("--output", "-o", default="log_report.json", help="Output file path")
-    parser.add_argument("--format", choices=["json", "csv", "html"], default="json", help="Output format")
+    parser.add_argument("--format", choices=["json", "csv", "html", "jsonl"], default="json", help="Output format (jsonl: one JSON object per line)")
     parser.add_argument("--search", help="Search for a string in logs")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     return parser.parse_args()
@@ -456,6 +499,8 @@ def main():
         aggregator.export_csv(args.output)
     elif args.format == "html":
         aggregator.generate_html_report(args.output)
+    elif args.format == "jsonl":
+        aggregator.export_jsonl(args.output, unparseable_lines=aggregator.unparseable_lines)
     else:
         aggregator.export_json(args.output)
 
