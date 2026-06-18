@@ -1,0 +1,11 @@
+{
+  "commit": "60df5446",
+  "branch": "bounty-185-jsonl-output",
+  "status": "PASS",
+  "module": "tools/log_aggregator.py",
+  "tests": 3,
+  "timestamp": "2026-06-18T14:45:00Z",
+  "summary": "JSONL output format for log aggregator",
+  "files_changed": 5,
+  "logd": "build-60df5446.logd"
+}
