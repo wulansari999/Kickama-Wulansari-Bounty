@@ -310,3 +310,69 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+## AI Reviewer — SARIF Output
+
+The `ai_reviewer.py` tool supports SARIF 2.1.0 output for integration with GitHub
+Code Scanning, VS Code SARIF extensions, and other static-analysis tooling.
+
+### Usage
+
+```bash
+# Review a single file, output SARIF to stdout
+python tools/ai_reviewer.py --path path/to/file.py --format sarif
+
+# Review a single file, write SARIF to file
+python tools/ai_reviewer.py --path path/to/file.py --format sarif --output review.sarif
+
+# Review a directory recursively, output SARIF
+python tools/ai_reviewer.py --path ./src --recursive --format sarif --output review.sarif
+
+# JSON format is also available
+python tools/ai_reviewer.py --path path/to/file.py --format json
+
+# Text format (default) — unchanged
+python tools/ai_reviewer.py --path path/to/file.py
+```
+
+### Format Options
+
+| `--format` | Description | Default |
+|------------|-------------|---------|
+| `text`     | Human-readable terminal output | **default** |
+| `json`     | Machine-readable JSON (same structure as text but serialized) |
+| `sarif`    | SARIF 2.1.0 — compatible with GitHub Code Scanning |
+
+### Severity Mapping (SARIF)
+
+| ai-reviewer Severity | SARIF Level |
+|---------------------|-------------|
+| `CRITICAL`          | `error`     |
+| `HIGH`              | `error`     |
+| `ERROR`             | `error`     |
+| `WARNING`           | `warning`   |
+| `INFO`              | `note`      |
+| `SUGGESTION`        | `note`      |
+
+### GitHub Code Scanning Integration
+
+To use with GitHub Code Scanning, pipe the SARIF output and upload it:
+
+```bash
+python tools/ai_reviewer.py --path ./src --recursive --format sarif > results.sarif
+# Then upload to GitHub (requires `gh` CLI 2.0+)
+gh api --method POST \
+  -H "Accept: application/vnd.github+json" \
+  /repos/:owner/:repo/code-scanning/sarifs \
+  -f "commit_sha=$(git rev-parse HEAD)" \
+  -f "ref=$(git symbolic-ref HEAD)" \
+  -f sarif=@results.sarif
+```
+
+### Tests
+
+SARIF output tests are located in `tests/test_ai_reviewer_sarif.py`. Run them with:
+
+```bash
+python -m pytest tests/test_ai_reviewer_sarif.py -v
+```

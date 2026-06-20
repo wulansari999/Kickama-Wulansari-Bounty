@@ -112,6 +112,7 @@ class ReviewSeverity(Enum):
     """Severity levels for review findings."""
 
     CRITICAL = "critical"
+    HIGH = "high"
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
@@ -794,8 +795,131 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--path", type=str, required=True, help="File or directory to review")
     parser.add_argument("--recursive", action="store_true", help="Review directories recursively")
-    parser.add_argument("--output", type=str, default=None, help="Output JSON report path")
+    parser.add_argument("--output", type=str, default=None, help="Output report path")
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="text",
+        choices=["text", "json", "sarif"],
+        help="Output format: text (default), json, or sarif",
+    )
     return parser
+
+
+# ---------------------------------------------------------------------------
+# SARIF
+# ---------------------------------------------------------------------------
+
+
+def _map_severity_to_sarif_level(severity: ReviewSeverity) -> str:
+    """Map ReviewSeverity to SARIF 2.1.0 result levels."""
+    mapping = {
+        ReviewSeverity.CRITICAL: "error",
+        ReviewSeverity.HIGH: "error",
+        ReviewSeverity.ERROR: "error",
+        ReviewSeverity.WARNING: "warning",
+        ReviewSeverity.INFO: "note",
+        ReviewSeverity.SUGGESTION: "note",
+    }
+    return mapping.get(severity, "none")
+
+
+def generate_sarif_report(
+    report: ProjectReviewReport,
+    output_path: Optional[Path] = None,
+) -> str:
+    """Generate a SARIF 2.1.0 report from a ProjectReviewReport."""
+
+    sarif_doc = {
+        "$schema": (
+            "https://docs.oasis-open.org/sarif/sarif/v2.1.0/"
+            "errata01/os/schemas/sarif-v2.1.0-errata01-os-schema.json"
+        ),
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "ai-reviewer",
+                        "informationUri": "https://github.com/lobster-trap/Kickama",
+                        "version": "1.0.0",
+                    }
+                },
+                "results": _build_sarif_results(report),
+                "properties": {
+                    "project_path": report.project_path,
+                    "total_files": report.total_files,
+                    "reviewed_files": report.reviewed_files,
+                    "total_findings": report.total_findings,
+                },
+            }
+        ],
+    }
+
+    sarif_str = json.dumps(sarif_doc, indent=2, default=str)
+
+    if output_path:
+        output_path.write_text(sarif_str)
+        logger.info(f"SARIF report written to {output_path}")
+
+    return sarif_str
+
+
+def _build_sarif_results(report: ProjectReviewReport) -> list:
+    """Build the results array for a SARIF run from findings."""
+    results = []
+
+    rule_ids_seen: set[str] = set()
+
+    for file_result in report.file_results:
+        for finding in file_result.findings:
+            rule_id = finding.rules[0] if finding.rules else finding.id
+
+            rule_ids_seen.add(rule_id)
+
+            result_entry: dict = {
+                "ruleId": rule_id,
+                "level": _map_severity_to_sarif_level(finding.severity),
+                "message": {
+                    "text": finding.message,
+                },
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {
+                                "uri": finding.file_path,
+                            },
+                            "region": {
+                                "startLine": finding.line_number,
+                            },
+                        }
+                    }
+                ],
+            }
+
+            if finding.suggestion:
+                result_entry["properties"] = {
+                    "suggestion": finding.suggestion,
+                }
+
+            if finding.column:
+                result_entry["locations"][0]["physicalLocation"]["region"][
+                    "startColumn"
+                ] = finding.column
+
+            if finding.code_snippet:
+                result_entry["locations"][0]["physicalLocation"]["region"][
+                    "snippet"
+                ] = {"text": finding.code_snippet}
+
+            results.append(result_entry)
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -804,9 +928,72 @@ def main() -> int:
 
     reviewer = AiCodeReviewer()
     path = Path(args.path)
+    fmt = args.format
 
     if path.is_file():
         result = reviewer.review_file(path)
+
+        if fmt == "sarif":
+            report = ProjectReviewReport(
+                timestamp=datetime.now().isoformat(),
+                project_path=str(path),
+                total_files=1,
+                reviewed_files=1,
+                total_findings=len(result.findings),
+                critical_findings=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.CRITICAL]
+                ),
+                errors=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.ERROR]
+                ),
+                warnings=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.WARNING]
+                ),
+                info_findings=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.INFO]
+                ),
+                suggestions=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.SUGGESTION]
+                ),
+                file_results=[result],
+            )
+            output = generate_sarif_report(
+                report, Path(args.output) if args.output else None
+            )
+            print(output)
+            return 0
+
+        if fmt == "json":
+            report = ProjectReviewReport(
+                timestamp=datetime.now().isoformat(),
+                project_path=str(path),
+                total_files=1,
+                reviewed_files=1,
+                total_findings=len(result.findings),
+                critical_findings=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.CRITICAL]
+                ),
+                errors=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.ERROR]
+                ),
+                warnings=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.WARNING]
+                ),
+                info_findings=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.INFO]
+                ),
+                suggestions=len(
+                    [f for f in result.findings if f.severity == ReviewSeverity.SUGGESTION]
+                ),
+                file_results=[result],
+            )
+            output = reviewer.generate_report_json(
+                report, Path(args.output) if args.output else None
+            )
+            print(output)
+            return 0
+
+        # text format (default)
         print(f"\n{'='*60}")
         print(f"AI Code Review: {path}")
         print(f"{'='*60}")
@@ -837,6 +1024,24 @@ def main() -> int:
 
     elif path.is_dir():
         report = reviewer.review_directory(path, args.recursive)
+
+        if fmt == "sarif":
+            output = generate_sarif_report(
+                report, Path(args.output) if args.output else None
+            )
+            print(output)
+            if args.output:
+                return 0
+            return 0
+
+        if fmt == "json":
+            output = reviewer.generate_report_json(
+                report, Path(args.output) if args.output else None
+            )
+            print(output)
+            return 0
+
+        # text format (default)
         print(f"\n{'='*60}")
         print(f"AI Project Review: {path}")
         print(f"{'='*60}")
